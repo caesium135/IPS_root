@@ -1,9 +1,0 @@
-backend/.venv/
-__pycache__/
-*.pyc
-results/*
-!results/.gitkeep
-uploads/*
-!uploads/.gitkeep
-.git/
-.DS_Store

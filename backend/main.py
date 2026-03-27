@@ -108,30 +108,6 @@ async def delete_folder(folder_name: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/folders/{folder_name}/rename")
-async def rename_folder(folder_name: str, new_name: str = Form(...)):
-    try:
-        # Sanitize new name
-        safe_name = "".join([c for c in new_name if c.isalnum() or c in " -_"]).strip()
-        if not safe_name:
-             raise HTTPException(status_code=400, detail="Invalid folder name")
-             
-        old_path = UPLOAD_DIR / folder_name
-        new_path = UPLOAD_DIR / safe_name
-        
-        if not old_path.exists():
-            raise HTTPException(status_code=404, detail="Folder not found")
-            
-        if new_path.exists():
-            raise HTTPException(status_code=400, detail="Folder with this name already exists")
-            
-        # Rename
-        os.rename(old_path, new_path)
-        
-        return {"status": "success", "old_name": folder_name, "new_name": safe_name}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 # --- Folder Aggregation ---
 
 class FolderSelectionRequest(BaseModel):
@@ -352,7 +328,7 @@ async def list_images(folder: str = Query(None)):
             return [] # Empty if folder doesn't exist
             
     for path in target_dir.glob("*"):
-        if path.is_file() and path.suffix.lower() in ['.tif', '.tiff', '.jpg', '.jpeg', '.png', '.dm3', '.dm4', '.emd']:
+        if path.is_file() and path.suffix.lower() in ['.tif', '.tiff', '.jpg', '.jpeg', '.png', '.dm3', '.dm4']:
             # Try to extract original name if it follows UUID_Name pattern
             display_name = path.name
             if len(path.name) > 37 and path.name[36] == '_':
@@ -396,7 +372,7 @@ async def delete_image(image_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/process/{image_id}")
-async def process_image_endpoint(image_id: str, manual_pixel_size: float = None, requested_bar_length_nm: float = None, invert: bool = False):
+async def process_image_endpoint(image_id: str, manual_pixel_size: float = None, requested_bar_length_nm: float = None):
     try:
         # Find file with image_id (recursive search for subfolders)
         files = list(UPLOAD_DIR.rglob(f"{image_id}.*"))
@@ -433,7 +409,7 @@ async def process_image_endpoint(image_id: str, manual_pixel_size: float = None,
                         calibration_source_path = f
                         break
         
-        if not manual_pixel_size and not invert:
+        if not manual_pixel_size:
             # Check for existing results to avoid re-processing
             results_path = RESULTS_DIR / f"{image_id}_results.json"
             if results_path.exists():
@@ -444,7 +420,7 @@ async def process_image_endpoint(image_id: str, manual_pixel_size: float = None,
                 except Exception:
                     pass # If corrupt, re-process
 
-        result = process_image(input_path, RESULTS_DIR, manual_pixel_size, calibration_source_path, invert=invert)
+        result = process_image(input_path, RESULTS_DIR, manual_pixel_size, calibration_source_path)
         
         return result
     except Exception as e:
@@ -497,9 +473,6 @@ async def export_data(req: ExportRequest):
         
         save_results_to_excel(filtered_results, temp_path)
         
-        if not temp_path.exists():
-             raise HTTPException(status_code=500, detail="Export file was not created")
-
         # We should use BackgroundTasks to clean up, but simpler here:
         # FileResponse can delete after? using background. 
         # But allow it to persist is fine for now (results dir is cache).

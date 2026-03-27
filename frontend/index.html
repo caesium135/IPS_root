@@ -413,10 +413,7 @@
         <div id="folderLedgerView">
             <div class="ledger-header">
                 <h2>Folders</h2>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-outline" onclick="selectFolder('')">⚡ Quick Analysis (No Folder)</button>
-                    <button class="btn" onclick="createFolder()">+ Create New Folder</button>
-                </div>
+                <button class="btn" onclick="createFolder()">+ Create New Folder</button>
             </div>
 
             <table class="ledger-table">
@@ -445,22 +442,21 @@
                 <div style="gap: 10px; display: flex;">
                     <button class="btn btn-outline" style="padding: 10px 15px;"
                         onclick="openUploadHelp()">Instructions</button>
-                    <button id="btnRenameFolder" class="btn btn-outline" onclick="renameCurrentFolder()">Rename</button>
-                    <button id="btnViewAnalysis" class="btn" onclick="viewFolderAnalysis()">View Analysis</button>
-                    <button id="btnDeleteFolder" class="btn btn-danger" onclick="deleteCurrentFolder()">Delete
-                        Folder</button>
+                    <button class="btn" onclick="viewFolderAnalysis()">View Analysis</button>
+                    <button class="btn btn-danger" onclick="deleteCurrentFolder()">Delete Folder</button>
                 </div>
             </div>
 
             <div class="upload-section">
                 <h3>Upload Images</h3>
 
-                <p style="color: #666; margin-bottom: 20px;">
-                    Supported formats: .tiff, .dm3, .dm4, .emd, .jpg, .png
+                <p style="color: red; margin-bottom: 20px; font-weight: bold;">
+                    Both .tiff image and .dm3 file with <u style="text-decoration-thickness: 2px;">the same name</u>
+                    required for analysis
                 </p>
                 <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">Choose
                     Files</button>
-                <input type="file" id="fileInput" multiple accept=".tif,.tiff,.jpg,.png,.dm3,.dm4,.emd"
+                <input type="file" id="fileInput" multiple accept=".tif,.tiff,.jpg,.png,.dm3,.dm4"
                     style="display: none;" onchange="handleUpload(this.files)">
             </div>
 
@@ -470,14 +466,14 @@
                     <button class="modal-close" onclick="closeUploadHelp(event)">×</button>
                     <div class="modal-section">
                         <h3>Upload Instructions</h3>
-                        <p>You can upload <strong>multiple images</strong> at once.</p>
-                        <p>Supported file types:</p>
+                        <p>You can identify and upload <strong>multiple images</strong> at once.</p>
+                        <p>However, to ensure accurate pixel-to-nanometer scaling, the system requires:</p>
                         <ul>
-                            <li><strong>.dm3 / .dm4 (Recommended)</strong>: Contains metadata for automatic scaling.
-                            </li>
-                            <li><strong>.tiff / .tif</strong>: Standard images.</li>
-                            <li><strong>.jpg / .png</strong>: Standard images.</li>
+                            <li>The raw image file (e.g., <code>image_01.tif</code>)</li>
+                            <li>The metadata file (e.g., <code>image_01.dm3</code>)</li>
                         </ul>
+                        <p><strong>Crucial:</strong> These files must share <u>exactly the same filename</u> (ignoring
+                            the extension).</p>
 
                         <div
                             style="background-color: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin-top: 15px; border: 1px solid #ffeeba;">
@@ -507,8 +503,6 @@
             const folderParam = urlParams.get('folder');
             if (folderParam) {
                 selectFolder(folderParam);
-            } else if (urlParams.get('quick') === 'true') {
-                selectFolder('');
             }
         });
 
@@ -554,8 +548,6 @@
                             <a class="folder-link" onclick="selectFolder('${folder}')">📁 ${folder}</a>
                         </td>
                         <td style="text-align: right;">
-                             <button class="btn btn-outline" style="padding: 5px 10px; font-size: 14px; margin-right: 5px;" 
-                                onclick="event.stopPropagation(); renameFolder('${folder}')">Rename</button>
                             <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="deleteFolderByName('${folder}')">Delete</button>
                         </td>
                     `;
@@ -569,36 +561,12 @@
         // --- Folder Selection Logic ---
 
         function selectFolder(folderName) {
-            currentFolder = folderName || ""; // Empty string = Root
-
-            if (!currentFolder) {
-                document.getElementById('currentFolderTitle').textContent = "Quick Analysis (Root)";
-                // Hide folder-specific actions
-                document.getElementById('btnViewAnalysis').style.display = 'none';
-                document.getElementById('btnDeleteFolder').style.display = 'none';
-                document.getElementById('btnRenameFolder').style.display = 'none';
-            } else {
-                document.getElementById('currentFolderTitle').textContent = folderName;
-                document.getElementById('btnViewAnalysis').style.display = 'inline-block';
-                document.getElementById('btnDeleteFolder').style.display = 'inline-block';
-                document.getElementById('btnRenameFolder').style.display = 'inline-block';
-            }
+            currentFolder = folderName;
+            document.getElementById('currentFolderTitle').textContent = folderName;
 
             // URL Update
             const url = new URL(window.location);
-            if (currentFolder) {
-                url.searchParams.set('folder', currentFolder);
-            } else {
-                url.searchParams.delete('folder');
-                // Maybe set a flag 'mode=quick' if needed, but 'folder' missing could imply root or ledger. 
-                // Wait, if I delete folder param, refresh might go back to ledger?
-                // `window.location.search` check in init: `if (folderParam) selectFolder(folderParam)`. 
-                // If I am in Quick Mode, I want to stay there on refresh? 
-                // Let's set a special param or just rely on manual navigation for now. 
-                // Actually, if I want to support deep linking to root mode, I need a param.
-                // Let's add 'quick=true'
-                url.searchParams.set('quick', 'true');
-            }
+            url.searchParams.set('folder', folderName);
             window.history.pushState({}, '', url);
 
             // Toggle Views
@@ -615,7 +583,6 @@
             // URL Update
             const url = new URL(window.location);
             url.searchParams.delete('folder');
-            url.searchParams.delete('quick');
             window.history.pushState({}, '', url);
 
             // Toggle Views
@@ -627,50 +594,6 @@
         }
 
         // --- Folder Operations ---
-
-        async function renameCurrentFolder() {
-            if (!currentFolder) return;
-            renameFolder(currentFolder);
-        }
-
-        async function renameFolder(folderName) {
-            const newName = prompt("Enter new name for folder:", folderName);
-            if (!newName || newName === folderName) return;
-
-            try {
-                const formData = new FormData();
-                formData.append('new_name', newName);
-
-                const response = await fetch(`/folders/${encodeURIComponent(folderName)}/rename`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.ok) {
-                    const res = await response.json();
-
-                    // Update if we are inside the folder
-                    if (currentFolder === folderName) {
-                        currentFolder = res.new_name;
-                        // Update URL
-                        const url = new URL(window.location);
-                        url.searchParams.set('folder', currentFolder);
-                        window.history.replaceState({}, '', url);
-
-                        document.getElementById('currentFolderTitle').textContent = currentFolder;
-                        loadImages(); // Refresh images
-                    }
-
-                    loadFolders(); // Refresh list
-                } else {
-                    const err = await response.json();
-                    alert("Error: " + err.detail);
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Rename failed");
-            }
-        }
 
         async function deleteCurrentFolder() {
             if (!currentFolder) return;
@@ -706,16 +629,10 @@
         // --- Image Operations ---
 
         async function loadImages() {
-            // if (!currentFolder) return; // Allow root which is empty string
-
-            // Build query
-            let url = '/images';
-            if (currentFolder) {
-                url += `?folder=${encodeURIComponent(currentFolder)}`;
-            }
+            if (!currentFolder) return;
 
             try {
-                const response = await fetch(url);
+                const response = await fetch(`/images?folder=${encodeURIComponent(currentFolder)}`);
                 const images = await response.json();
                 const gallery = document.getElementById('gallery');
                 gallery.innerHTML = '';
@@ -727,9 +644,9 @@
                 }
 
                 images.forEach(img => {
+                    // Filter Gatan files from view
                     const name = img.display_name || img.filename;
-                    // Filter Gatan files from view -> REMOVED
-                    // if (name.toLowerCase().endsWith('.dm3') ...
+                    if (name.toLowerCase().endsWith('.dm3') || name.toLowerCase().endsWith('.dm4')) return;
 
                     const isProcessing = img.status === 'processing';
                     if (isProcessing) hasProcessing = true;
@@ -787,12 +704,10 @@
         }
 
         async function handleUpload(files) {
-            if (!files.length) return; // Allow root upload
+            if (!files.length || !currentFolder) return;
 
             const formData = new FormData();
-            if (currentFolder) {
-                formData.append('folder', currentFolder);
-            }
+            formData.append('folder', currentFolder);
             for (let i = 0; i < files.length; i++) {
                 formData.append('files', files[i]);
             }

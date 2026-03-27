@@ -13,7 +13,6 @@ from scipy import ndimage as ndi
 import ncempy.io as nio
 from autodetect_utils import image_kmeans, ruecs, dilmarkers
 import uuid
-import h5py
 
 def save_results_to_excel(results, output_path):
     """
@@ -40,10 +39,12 @@ def save_results_to_excel(results, output_path):
     stats_df = pd.DataFrame(stats_rows)
 
     # Save to Excel
-    # Removed try-except to allow propagation of errors to caller (main.py)
-    with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
-        stats_df.to_excel(writer, sheet_name="Statistics", index=False)
-        df_export.to_excel(writer, sheet_name="Data", index=False)
+    try:
+        with pd.ExcelWriter(output_path) as writer:
+            stats_df.to_excel(writer, sheet_name="Statistics", index=False)
+            df_export.to_excel(writer, sheet_name="Data", index=False)
+    except Exception as e:
+        print(f"Excel export failed: {e}")
 
 
 def calculate_volume(length_nm, width_nm):
@@ -86,50 +87,6 @@ def generate_preview(image_path: Path, output_dir: Path):
             except:
                 pass
         
-        elif ext == '.emd':
-            try:
-                # ncempy supports EMD format natively
-                emd_data = nio.read(str(image_path))
-                raw_data = emd_data['data']
-                if raw_data.ndim == 3:
-                    raw_data = raw_data[0]
-                elif raw_data.ndim == 4:
-                    raw_data = raw_data[0, 0]
-                norm_data = cv2.normalize(raw_data, None, 0, 255, cv2.NORM_MINMAX)
-                img = norm_data.astype(np.uint8)
-            except Exception as e:
-                print(f"EMD preview error with ncempy: {e}")
-                # Fallback to h5py with more flexible navigation
-                try:
-                    with h5py.File(str(image_path), 'r') as f:
-                        raw_data = None
-                        # Try common EMD paths
-                        def find_image_data(group, depth=0):
-                            if depth > 5:
-                                return None
-                            for key in group.keys():
-                                item = group[key]
-                                if isinstance(item, h5py.Dataset):
-                                    if item.ndim >= 2 and item.shape[0] > 10 and item.shape[1] > 10:
-                                        return item[()]
-                                elif isinstance(item, h5py.Group):
-                                    result = find_image_data(item, depth + 1)
-                                    if result is not None:
-                                        return result
-                            return None
-                        
-                        raw_data = find_image_data(f)
-                        
-                        if raw_data is not None:
-                            if raw_data.ndim == 3:
-                                raw_data = raw_data[0]
-                            elif raw_data.ndim == 4:
-                                raw_data = raw_data[0, 0]
-                            norm_data = cv2.normalize(raw_data, None, 0, 255, cv2.NORM_MINMAX)
-                            img = norm_data.astype(np.uint8)
-                except Exception as e2:
-                    print(f"EMD preview error with h5py fallback: {e2}")
-        
         if img is None:
             # Try reading with OpenCV (works for TIFF, PNG, JPG)
             # Use IMREAD_UNCHANGED to get original depth then normalize
@@ -155,7 +112,7 @@ def generate_preview(image_path: Path, output_dir: Path):
 
 
 
-def process_image(image_path: Path, output_dir: Path, manual_pixel_size: float = None, calibration_source_path: Path = None, requested_bar_length_nm: float = None, invert: bool = False):
+def process_image(image_path: Path, output_dir: Path, manual_pixel_size: float = None, calibration_source_path: Path = None, requested_bar_length_nm: float = None):
     # Default to 200nm if not specified, as per user request to "have blue line as 200 nm"
     if requested_bar_length_nm is None:
         requested_bar_length_nm = 200.0
@@ -209,32 +166,6 @@ def process_image(image_path: Path, output_dir: Path, manual_pixel_size: float =
         except Exception as e:
             print(f"Error reading Gatan file: {e}")
 
-    elif ext == '.emd':
-        try:
-            # ncempy supports EMD format natively
-            emd_data = nio.read(str(image_path))
-            raw_data = emd_data['data']
-            if raw_data.ndim == 3:
-                raw_data = raw_data[0]
-            elif raw_data.ndim == 4:
-                raw_data = raw_data[0, 0]
-            norm_data = cv2.normalize(raw_data, None, 0, 255, cv2.NORM_MINMAX)
-            img = norm_data.astype(np.uint8)
-            
-            # Try to get pixel size from ncempy metadata
-            if pixel_size_nm is None and 'pixelSize' in emd_data:
-                psize = emd_data['pixelSize']
-                if len(psize) > 0:
-                    val = float(psize[0])
-                    # Convert to nm if in meters
-                    if val < 1e-6:
-                        pixel_size_nm = val * 1e9
-                    else:
-                        pixel_size_nm = val
-                    calibration_info = {"method": "metadata_emd", "pixel_size_nm": pixel_size_nm}
-        except Exception as e:
-            print(f"Error reading EMD file: {e}")
-
     if img is None:
         # Standard image load
         img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
@@ -259,16 +190,9 @@ def process_image(image_path: Path, output_dir: Path, manual_pixel_size: float =
     # 3. Preprocessing & Segmentation (AutoDetect-mNP)
     # User requested "Option 4": AutoDetect-mNP (K-means + rUECS)
     
-    # Apply inversion if requested (for white-background/dark-particle images)
-    # This inverts the image BEFORE K-means so that the segmentation logic works correctly
-    img_for_segmentation = img
-    if invert:
-        img_for_segmentation = cv2.bitwise_not(img)
-        print(f"DEBUG: Inversion applied to image before segmentation")
-    
     # Step 1: K-means Segmentation
     # This replaces Adaptive Thresholding
-    binary = image_kmeans(img_for_segmentation)
+    binary = image_kmeans(img)
     
     # MASKING SCALE BAR (Fix for "detecting rods near scale")
     # If we have scale bar coordinates, mask that area out in the binary image

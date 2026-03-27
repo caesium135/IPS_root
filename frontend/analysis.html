@@ -350,8 +350,6 @@
         </div>
     </div>
 
-
-
     <div id="loading" class="loading">
         <div class="spinner"></div>
         <p>Processing Image...</p>
@@ -385,19 +383,6 @@
                 style="background: #e9ecef; padding: 10px; border-radius: 5px; margin-bottom: 10px; text-align: center; font-size: 12px;">
                 <strong>Calibration:</strong> <span id="calibrationMethod">-</span> <br>
                 <strong>Pixel Size:</strong> <span id="pixelSize">-</span> nm/px
-                <button onclick="invertAndReprocess()"
-                    style="margin-left: 5px; padding: 2px 6px; font-size: 11px; cursor: pointer; border: 1px solid #dc3545; background: white; color: #dc3545; border-radius: 3px;">Invert</button>
-            </div>
-
-            <!-- Range Selection -->
-            <div
-                style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center; flex-wrap: wrap; font-size: 12px;">
-                <span>Range:</span>
-                <input type="number" id="rangeStart" placeholder="Start ID" style="width: 70px; padding: 3px;">
-                <span>to</span>
-                <input type="number" id="rangeEnd" placeholder="End ID" style="width: 70px; padding: 3px;">
-                <button onclick="selectRange(true)" style="padding: 3px 8px; cursor: pointer;">✓ Select</button>
-                <button onclick="selectRange(false)" style="padding: 3px 8px; cursor: pointer;">✗ Deselect</button>
             </div>
 
             <div class="scrollable-table">
@@ -406,9 +391,9 @@
                         <tr>
                             <th><input type="checkbox" id="selectAll" checked onclick="toggleAll(this)"></th>
                             <th>ID</th>
-                            <th style="cursor: pointer;" onclick="sortTableByColumn('length_nm')">L (nm) ⇅</th>
-                            <th style="cursor: pointer;" onclick="sortTableByColumn('width_nm')">W (nm) ⇅</th>
-                            <th style="cursor: pointer;" onclick="sortTableByColumn('aspect_ratio')">AR ⇅</th>
+                            <th>L (nm)</th>
+                            <th>W (nm)</th>
+                            <th>AR</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -993,79 +978,6 @@
             };
 
             html2pdf().set(opt).from(pdfContainer).save();
-        }
-
-        // --- Table Sorting ---
-        let currentSortColumn = null;
-        let sortAscending = true;
-
-        function sortTableByColumn(columnName) {
-            // Toggle sort direction if same column clicked again
-            if (currentSortColumn === columnName) {
-                sortAscending = !sortAscending;
-            } else {
-                currentSortColumn = columnName;
-                sortAscending = true;
-            }
-
-            // Sort currentData array
-            currentData.sort((a, b) => {
-                const valA = a[columnName] || 0;
-                const valB = b[columnName] || 0;
-                if (sortAscending) {
-                    return valA - valB;
-                } else {
-                    return valB - valA;
-                }
-            });
-
-            // Rebuild table - preserve checkbox states
-            const checkboxStates = {};
-            document.querySelectorAll('.rod-checkbox').forEach(cb => {
-                const index = cb.dataset.index;
-                checkboxStates[index] = cb.checked;
-            });
-
-            const tbody = document.querySelector('#dataTable tbody');
-            tbody.innerHTML = '';
-            currentData.forEach((rod, index) => {
-                const wasChecked = checkboxStates[index] !== undefined ? checkboxStates[index] : true;
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><input type="checkbox" class="rod-checkbox" data-index="${index}" ${wasChecked ? 'checked' : ''}></td>
-                    <td>${rod.id}</td>
-                    <td>${rod.length_nm.toFixed(1)}</td>
-                    <td>${rod.width_nm.toFixed(1)}</td>
-                    <td>${rod.aspect_ratio.toFixed(1)}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        async function invertAndReprocess() {
-            if (!confirm("This will re-analyze the image with inverted threshold (for black-background images). Continue?")) {
-                return;
-            }
-
-            try {
-                document.getElementById('content').style.display = 'none';
-                document.getElementById('loading').style.display = 'block';
-
-                const url = `/process/${imageId}?invert=true`;
-                const response = await fetch(url, { method: 'POST' });
-                const data = await response.json();
-
-                if (response.ok) {
-                    displayResults(data);
-                } else {
-                    throw new Error(data.detail || 'Server error');
-                }
-            } catch (error) {
-                console.error(error);
-                alert("Error inverting: " + error.message);
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('content').style.display = 'grid';
-            }
         }
 
         processImage();
